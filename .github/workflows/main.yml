@@ -49,12 +49,6 @@ jobs:
           "${{ env.DIR }}/sing-box" rule-set compile "$FILE" -o "$NAME.srs"
         done
 
-    - name: Upload SRS artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: hasil-srs
-        path: "*.srs"
-
     - name: Commit & Push SRS
       run: |
         git config --global user.email "github-actions@github.com"

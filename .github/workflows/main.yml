@@ -1,0 +1,65 @@
+name: Build Sing-box Rules
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+      with:
+        persist-credentials: true
+        fetch-depth: 1
+
+    - name: Install jq
+      run: sudo apt-get update && sudo apt-get install -y jq
+
+    - name: Get latest Sing-box URL (SAFE)
+      id: geturl
+      run: |
+        URL=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest \
+          | jq -r '.assets[] | select(.name | contains("linux-amd64.tar.gz")) | .browser_download_url')
+
+        {
+          echo "URL<<EOF"
+          echo "$URL"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Download & Extract Sing-box
+      run: |
+        wget -q "${{ steps.geturl.outputs.URL }}"
+        tar -xf *.tar.gz --wildcards "*/sing-box"
+        DIR=$(find . -type d -name "sing-box*" | head -n 1)
+        echo "DIR=$DIR" >> $GITHUB_ENV
+
+    - name: Compile all JSON from rules/ to SRS
+      run: |
+        for FILE in rules/*.json; do
+          NAME=$(basename "$FILE" .json)
+          echo "Compiling: $FILE → $NAME.srs"
+          "${{ env.DIR }}/sing-box" rule-set compile "$FILE" -o "$NAME.srs"
+        done
+
+    - name: Upload SRS artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: hasil-srs
+        path: "*.srs"
+
+    - name: Commit & Push SRS
+      run: |
+        git config --global user.email "github-actions@github.com"
+        git config --global user.name "GitHub Actions"
+
+        git add *.srs
+        git commit -m "Auto update SRS (from rules/)" || echo "No changes"
+        git push
